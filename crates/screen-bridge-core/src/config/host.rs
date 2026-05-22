@@ -1,3 +1,5 @@
+//! Host config schema и validation.
+
 use std::net::Ipv4Addr;
 
 use serde::Deserialize;
@@ -12,12 +14,19 @@ use crate::secret::Secret;
 
 #[derive(Debug, Clone, Deserialize, Eq, PartialEq)]
 #[serde(default, deny_unknown_fields)]
+/// Полный config для `screen-bridge-host`.
 pub struct HostConfig {
+    /// Настройки RTSP server.
     pub server: ServerConfig,
+    /// Настройки доступа к stream.
     pub security: SecurityConfig,
+    /// Настройки размера, fps и encoder mode.
     pub video: VideoConfig,
+    /// Настройки захвата экрана.
     pub capture: CaptureConfig,
+    /// Настройки логирования.
     pub logging: LoggingConfig,
+    /// Предупреждения после validation.
     #[serde(skip)]
     pub warnings: Vec<ConfigWarning>,
 }
@@ -39,6 +48,7 @@ impl Default for HostConfig {
 }
 
 impl HostConfig {
+    /// Проверяет, есть ли warning после validation.
     pub fn has_warning(&self, warning: ConfigWarning) -> bool {
         self.warnings.contains(&warning)
     }
@@ -46,10 +56,15 @@ impl HostConfig {
 
 #[derive(Debug, Clone, Deserialize, Eq, PartialEq)]
 #[serde(default, deny_unknown_fields)]
+/// Настройки RTSP server на host side.
 pub struct ServerConfig {
+    /// IPv4, на котором слушает host. Если не задан, host выберет LAN IPv4 сам.
     pub bind_ip: Option<Ipv4Addr>,
+    /// TCP port RTSP server.
     pub port: u16,
+    /// RTSP path, например `/screen`.
     pub stream_path: String,
+    /// Максимум одновременных viewer для MVP.
     pub max_clients: u16,
 }
 
@@ -66,9 +81,13 @@ impl Default for ServerConfig {
 
 #[derive(Debug, Clone, Deserialize, Eq, PartialEq)]
 #[serde(default, deny_unknown_fields)]
+/// Настройки Basic auth и subnet allowlist.
 pub struct SecurityConfig {
+    /// Имя пользователя для RTSP Basic auth.
     pub auth_user: String,
+    /// Token для RTSP Basic auth.
     pub access_token: Secret,
+    /// Разрешенная IPv4 subnet или явное значение "any".
     pub allow_subnet: String,
 }
 
@@ -84,11 +103,17 @@ impl Default for SecurityConfig {
 
 #[derive(Debug, Clone, Deserialize, Eq, PartialEq)]
 #[serde(default, deny_unknown_fields)]
+/// Настройки видеопотока host.
 pub struct VideoConfig {
+    /// Ширина кадра.
     pub width: u32,
+    /// Высота кадра.
     pub height: u32,
+    /// Частота кадров.
     pub fps: u32,
+    /// Целевой bitrate encoder в kbps.
     pub bitrate_kbps: u32,
+    /// Режим выбора encoder: "auto" или "software_only".
     pub encoder: String,
 }
 
@@ -106,9 +131,13 @@ impl Default for VideoConfig {
 
 #[derive(Debug, Clone, Deserialize, Eq, PartialEq)]
 #[serde(default, deny_unknown_fields)]
+/// Настройки захвата экрана.
 pub struct CaptureConfig {
+    /// Индекс монитора. Значение -1 означает primary monitor.
     pub monitor_index: i32,
+    /// Нужно ли захватывать курсор.
     pub capture_cursor: bool,
+    /// Capture backend для GStreamer source: "dxgi" или "wgc".
     pub capture_api: String,
 }
 
@@ -122,6 +151,7 @@ impl Default for CaptureConfig {
     }
 }
 
+/// Проверяет host config и возвращает его вместе с warning flags.
 pub fn validate_host(mut config: HostConfig) -> Result<HostConfig, ConfigError> {
     config.warnings.clear();
 

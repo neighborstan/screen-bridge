@@ -1,3 +1,5 @@
+//! Viewer config schema и validation.
+
 use serde::Deserialize;
 
 use crate::config::validate::{
@@ -9,9 +11,13 @@ use crate::secret::Secret;
 
 #[derive(Debug, Clone, Deserialize, Eq, PartialEq)]
 #[serde(default, deny_unknown_fields)]
+/// Полный config для `screen-bridge-viewer`.
 pub struct ViewerConfig {
+    /// Настройки подключения к host.
     pub connection: ConnectionConfig,
+    /// Настройки RTSP playback.
     pub playback: PlaybackConfig,
+    /// Настройки логирования.
     pub logging: LoggingConfig,
 }
 
@@ -30,11 +36,17 @@ impl Default for ViewerConfig {
 
 #[derive(Debug, Clone, Deserialize, Eq, PartialEq)]
 #[serde(default, deny_unknown_fields)]
+/// Настройки подключения viewer к host.
 pub struct ConnectionConfig {
+    /// IPv4 или hostname host machine.
     pub host: String,
+    /// RTSP port host machine.
     pub port: u16,
+    /// RTSP path, например `/screen`.
     pub stream_path: String,
+    /// Имя пользователя для RTSP Basic auth.
     pub auth_user: String,
+    /// Token для RTSP Basic auth.
     pub access_token: Secret,
 }
 
@@ -52,9 +64,13 @@ impl Default for ConnectionConfig {
 
 #[derive(Debug, Clone, Deserialize, Eq, PartialEq)]
 #[serde(default, deny_unknown_fields)]
+/// Настройки воспроизведения RTSP stream.
 pub struct PlaybackConfig {
+    /// Transport для RTSP. В MVP разрешен только "tcp".
     pub rtsp_transport: String,
+    /// GStreamer latency buffer в миллисекундах.
     pub latency_ms: u32,
+    /// Автопереподключение. В MVP должно быть `false`.
     pub reconnect: bool,
 }
 
@@ -68,6 +84,7 @@ impl Default for PlaybackConfig {
     }
 }
 
+/// Проверяет viewer config по правилам MVP.
 pub fn validate_viewer(config: ViewerConfig) -> Result<ViewerConfig, ConfigError> {
     validate_non_empty("connection.host", &config.connection.host)?;
     validate_port("connection.port", config.connection.port)?;

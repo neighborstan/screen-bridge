@@ -1,7 +1,10 @@
+//! Общие validation helpers для config modules.
+
 use crate::config::{ConfigError, LoggingConfig};
 use crate::logging;
 use crate::secret::Secret;
 
+/// Минимальная длина access token для MVP.
 pub const MIN_ACCESS_TOKEN_CHARS: usize = 16;
 
 const PLACEHOLDER_ACCESS_TOKENS: &[&str] = &[
@@ -15,11 +18,14 @@ const PLACEHOLDER_ACCESS_TOKENS: &[&str] = &[
 ];
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
+/// Предупреждения, которые не блокируют запуск, но важны для security.
 pub enum ConfigWarning {
+    /// Пользователь явно отключил subnet allowlist значением "any".
     AllowSubnetAny,
 }
 
 impl ConfigWarning {
+    /// Возвращает короткое сообщение для логов или diagnostic output.
     pub fn message(self) -> &'static str {
         match self {
             Self::AllowSubnetAny => {

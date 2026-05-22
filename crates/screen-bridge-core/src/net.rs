@@ -1,3 +1,5 @@
+//! Помощники для LAN IPv4 и subnet allowlist.
+
 use std::net::Ipv4Addr;
 use std::str::FromStr;
 
@@ -6,12 +8,16 @@ use ipnet::Ipv4Net;
 use thiserror::Error;
 
 #[derive(Debug, Clone, Eq, PartialEq)]
+/// Разрешенная subnet для входящих подключений.
 pub enum Subnet {
+    /// Явный opt-out: разрешить любой peer IP.
     Any,
+    /// IPv4 CIDR, например `192.168.1.0/24`.
     V4(Ipv4Net),
 }
 
 impl Subnet {
+    /// Проверяет, входит ли IPv4 address в эту subnet.
     pub fn matches(&self, ip: Ipv4Addr) -> bool {
         match self {
             Self::Any => true,
@@ -21,19 +27,28 @@ impl Subnet {
 }
 
 #[derive(Debug, Error)]
+/// Ошибка разбора subnet из config.
 pub enum SubnetParseError {
+    /// Значение пустое.
     #[error("значение обязательно: используйте IPv4 CIDR или \"any\"")]
     Empty,
+    /// Значение не похоже на IPv4 CIDR или "any".
     #[error("поддерживается только IPv4 CIDR или \"any\"")]
-    Invalid { reason: String },
+    Invalid {
+        /// Причина от parser.
+        reason: String,
+    },
 }
 
 #[derive(Debug, Error)]
+/// Ошибка получения локальных IPv4 addresses.
 pub enum LocalIpError {
+    /// OS не вернула список network interfaces.
     #[error("не удалось получить локальные IPv4 interfaces: {0}")]
     Query(#[from] std::io::Error),
 }
 
+/// Разбирает `allow_subnet` из config.
 pub fn parse_subnet(value: &str) -> Result<Subnet, SubnetParseError> {
     let value = value.trim();
 
@@ -52,10 +67,12 @@ pub fn parse_subnet(value: &str) -> Result<Subnet, SubnetParseError> {
         })
 }
 
+/// Проверяет IPv4 address по subnet allowlist.
 pub fn matches_subnet(ip: Ipv4Addr, subnet: &Subnet) -> bool {
     subnet.matches(ip)
 }
 
+/// Возвращает локальные private LAN IPv4 addresses.
 pub fn local_ipv4() -> Result<Vec<Ipv4Addr>, LocalIpError> {
     let mut addresses = Vec::new();
 
@@ -79,6 +96,7 @@ pub fn local_ipv4() -> Result<Vec<Ipv4Addr>, LocalIpError> {
     Ok(addresses)
 }
 
+/// Проверяет, подходит ли IPv4 address для автоматического bind в LAN.
 pub fn is_usable_lan_ipv4(ip: Ipv4Addr) -> bool {
     ip.is_private()
         && !ip.is_loopback()

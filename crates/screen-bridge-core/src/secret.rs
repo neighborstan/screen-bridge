@@ -1,3 +1,5 @@
+//! Типы и функции для безопасного отображения secret values.
+
 use std::fmt;
 
 use serde::Deserialize;
@@ -8,17 +10,22 @@ const MAX_MASK_CHARS: usize = 11;
 
 #[derive(Clone, Deserialize, Eq, Hash, PartialEq)]
 #[serde(transparent)]
+/// Secret value, который нельзя случайно вывести целиком через `Display` или
+/// `Debug`.
 pub struct Secret(String);
 
 impl Secret {
+    /// Создает secret value из строки.
     pub fn new(value: impl Into<String>) -> Self {
         Self(value.into())
     }
 
+    /// Возвращает исходное значение для кода, которому нужен настоящий token.
     pub fn as_str(&self) -> &str {
         &self.0
     }
 
+    /// Возвращает замаскированное значение для логов и diagnostic output.
     pub fn masked(&self) -> String {
         mask_token(&self.0)
     }
@@ -51,6 +58,7 @@ impl From<String> for Secret {
     }
 }
 
+/// Маскирует token по единому правилу проекта.
 pub fn mask_token(token: &str) -> String {
     let chars = token.chars().collect::<Vec<_>>();
     let len = chars.len();
