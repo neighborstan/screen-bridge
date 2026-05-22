@@ -1,0 +1,13 @@
+[package]
+name = "screen-bridge-viewer"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "screen-bridge-viewer"
+path = "src/main.rs"
+
+[dependencies]
+screen-bridge-core.workspace = true
