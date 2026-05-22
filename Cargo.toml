@@ -1,0 +1,16 @@
+[workspace]
+members = [
+    "crates/screen-bridge-core",
+    "crates/screen-bridge-host",
+    "crates/screen-bridge-viewer",
+]
+resolver = "2"
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.93"
+license = "MIT"
+
+[workspace.dependencies]
+screen-bridge-core = { path = "crates/screen-bridge-core" }
