@@ -7,3 +7,13 @@ license.workspace = true
 
 [lib]
 path = "src/lib.rs"
+
+[dependencies]
+if-addrs.workspace = true
+ipnet.workspace = true
+serde.workspace = true
+thiserror.workspace = true
+toml.workspace = true
+tracing.workspace = true
+tracing-appender.workspace = true
+tracing-subscriber.workspace = true

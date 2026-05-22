@@ -13,4 +13,12 @@ rust-version = "1.93"
 license = "MIT"
 
 [workspace.dependencies]
+if-addrs = "0.15.0"
+ipnet = "2.12.0"
+serde = { version = "1.0.228", features = ["derive"] }
 screen-bridge-core = { path = "crates/screen-bridge-core" }
+thiserror = "2.0.18"
+toml = "1.1.2"
+tracing = "0.1.44"
+tracing-appender = "0.2.5"
+tracing-subscriber = { version = "0.3.23", features = ["env-filter", "fmt"] }

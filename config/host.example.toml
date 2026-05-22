@@ -1,0 +1,30 @@
+[server]
+# If omitted, host will try to choose a LAN IPv4 automatically.
+# To explicitly listen on all interfaces, set 0.0.0.0 yourself.
+# bind_ip = "192.168.1.25"
+port = 8554
+stream_path = "/screen"
+max_clients = 1
+
+[security]
+auth_user = "viewer"
+# Placeholder intentionally invalid for startup until changed.
+access_token = "change-me-please-16"
+allow_subnet = "192.168.1.0/24"
+
+[video]
+width = 1280
+height = 720
+fps = 15
+bitrate_kbps = 2500
+encoder = "auto" # auto|software_only
+
+[capture]
+monitor_index = -1
+capture_cursor = true
+capture_api = "dxgi" # dxgi|wgc
+
+[logging]
+level = "info"
+directory = "logs"
+file_prefix = "host"
