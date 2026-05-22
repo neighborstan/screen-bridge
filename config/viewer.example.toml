@@ -1,0 +1,17 @@
+[connection]
+host = "192.168.1.25"
+port = 8554
+stream_path = "/screen"
+auth_user = "viewer"
+# Placeholder intentionally invalid for startup until changed.
+access_token = "change-me-please-16"
+
+[playback]
+rtsp_transport = "tcp"
+latency_ms = 100
+reconnect = false
+
+[logging]
+level = "info"
+directory = "logs"
+file_prefix = "viewer"
