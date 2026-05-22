@@ -17,5 +17,8 @@ ScreenBridge - Windows-приложение для просмотра экран
 .\scripts\check-gstreamer.ps1
 ```
 
+Скрипт автоматически использует локальную установку GStreamer из
+`.local\gstreamer\msvc_x86_64`, если она есть.
+
 Exit code `0` - окружение готово. Exit code `1` - есть критическая проблема,
 которую нужно исправить перед GStreamer smoke.

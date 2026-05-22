@@ -1,10 +1,67 @@
 [CmdletBinding()]
-param()
+param(
+    [string]$GStreamerRoot = ""
+)
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
 $script:Results = [System.Collections.Generic.List[object]]::new()
+
+function Resolve-ProjectRoot {
+    $scriptDirectory = Split-Path -Parent $PSCommandPath
+    return (Resolve-Path -LiteralPath (Join-Path -Path $scriptDirectory -ChildPath "..")).Path
+}
+
+function Add-PathEntry {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Entry
+    )
+
+    $parts = $env:Path -split [System.IO.Path]::PathSeparator
+    if ($parts -notcontains $Entry) {
+        $env:Path = "$Entry$([System.IO.Path]::PathSeparator)$env:Path"
+    }
+}
+
+function Import-GStreamerEnvironment {
+    param(
+        [string]$RequestedRoot
+    )
+
+    $candidates = [System.Collections.Generic.List[string]]::new()
+
+    if (-not [string]::IsNullOrWhiteSpace($RequestedRoot)) {
+        $candidates.Add($RequestedRoot) | Out-Null
+    }
+
+    $projectRoot = Resolve-ProjectRoot
+    $candidates.Add((Join-Path -Path $projectRoot -ChildPath ".local\gstreamer\msvc_x86_64")) | Out-Null
+    $candidates.Add((Join-Path -Path $projectRoot -ChildPath ".local\gstreamer\1.0\msvc_x86_64")) | Out-Null
+
+    foreach ($root in $candidates) {
+        if ([string]::IsNullOrWhiteSpace($root)) {
+            continue
+        }
+
+        $resolved = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($root)
+        $bin = Join-Path -Path $resolved -ChildPath "bin"
+        $gstLaunch = Join-Path -Path $bin -ChildPath "gst-launch-1.0.exe"
+        if (-not (Test-Path -LiteralPath $gstLaunch)) {
+            continue
+        }
+
+        $pkgConfigPath = Join-Path -Path $resolved -ChildPath "lib\pkgconfig"
+        $env:GSTREAMER_1_0_ROOT_MSVC_X86_64 = $resolved
+        $env:GSTREAMER_ROOT_X86_64 = $resolved
+        $env:PKG_CONFIG_PATH = $pkgConfigPath
+        Add-PathEntry -Entry $bin
+        return
+    }
+}
+
+Import-GStreamerEnvironment -RequestedRoot $GStreamerRoot
 
 function Add-Result {
     param(
