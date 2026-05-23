@@ -13,6 +13,9 @@ rust-version = "1.93"
 license = "MIT"
 
 [workspace.dependencies]
+anyhow = "1"
+ctrlc = "3"
+gstreamer-rtsp-server = "0.25"
 if-addrs = "0.15.0"
 ipnet = "2.12.0"
 serde = { version = "1.0.228", features = ["derive"] }
