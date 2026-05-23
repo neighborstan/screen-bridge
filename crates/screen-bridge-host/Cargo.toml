@@ -11,6 +11,10 @@ path = "src/main.rs"
 
 [dependencies]
 anyhow.workspace = true
+clap.workspace = true
 ctrlc.workspace = true
+glib.workspace = true
+gstreamer.workspace = true
 gstreamer-rtsp-server.workspace = true
 screen-bridge-core.workspace = true
+tracing.workspace = true
