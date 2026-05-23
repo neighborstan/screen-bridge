@@ -10,4 +10,7 @@ name = "screen-bridge-host"
 path = "src/main.rs"
 
 [dependencies]
+anyhow.workspace = true
+ctrlc.workspace = true
+gstreamer-rtsp-server.workspace = true
 screen-bridge-core.workspace = true
