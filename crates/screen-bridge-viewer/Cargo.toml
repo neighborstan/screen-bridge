@@ -10,4 +10,9 @@ name = "screen-bridge-viewer"
 path = "src/main.rs"
 
 [dependencies]
+anyhow.workspace = true
+clap.workspace = true
+ctrlc.workspace = true
+gstreamer.workspace = true
 screen-bridge-core.workspace = true
+tracing.workspace = true

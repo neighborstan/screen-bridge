@@ -31,9 +31,6 @@ Exit code `0` - окружение готово. Exit code `1` - есть кри
 Copy-Item config\host.example.toml config\host.local.toml
 ```
 
-`config\host.local.toml` игнорируется Git, потому что может содержать настоящий
-token.
-
 Перед запуском измените:
 
 - `security.access_token` - secret token не короче 16 символов, не placeholder.
@@ -68,6 +65,29 @@ cargo run -p screen-bridge-host -- --print-vlc-url --config config\host.local.to
 
 В VLC на другом компьютере в LAN откройте этот URL и используйте RTSP/TCP
 transport.
+
+## Viewer
+
+Создайте локальный config из примера:
+
+```powershell
+Copy-Item config\viewer.example.toml config\viewer.local.toml
+```
+
+Перед запуском измените:
+
+- `connection.host` - LAN IP компьютера, где запущен host.
+- `connection.access_token` - тот же token, что в host config.
+
+Запуск viewer:
+
+```powershell
+.\scripts\env-gstreamer.ps1
+cargo run -p screen-bridge-viewer -- --config config\viewer.local.toml
+```
+
+Viewer подключается по RTSP/TCP с Basic auth и открывает окно с видео host
+screen.
 
 ## GStreamer smoke
 
@@ -114,3 +134,7 @@ rtsp://<host-ip>:8554/screen
 
 В VLC нужно использовать RTSP/TCP transport. Скрипт останавливается через
 `Ctrl+C`.
+
+## Лицензия
+
+MIT. См. `LICENSE`.

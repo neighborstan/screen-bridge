@@ -62,6 +62,16 @@ function Add-PathEntry {
     }
 }
 
+function Disable-GioOptionalModules {
+    $projectRoot = Resolve-ProjectRoot
+    $gioModuleDir = Join-Path -Path $projectRoot -ChildPath "target\empty-gio-modules"
+    New-Item -ItemType Directory -Force -Path $gioModuleDir | Out-Null
+
+    # LAN RTSP does not need optional GIO modules, and the local GStreamer
+    # bundle can print a noisy giolibproxy.dll warning while scanning them.
+    $env:GIO_MODULE_DIR = $gioModuleDir
+}
+
 $gstreamerRoot = Resolve-GStreamerRoot -RequestedRoot $Root
 $gstreamerBin = Join-Path -Path $gstreamerRoot -ChildPath "bin"
 $pkgConfigPath = Join-Path -Path $gstreamerRoot -ChildPath "lib\pkgconfig"
@@ -70,6 +80,7 @@ $env:GSTREAMER_1_0_ROOT_MSVC_X86_64 = $gstreamerRoot
 $env:GSTREAMER_ROOT_X86_64 = $gstreamerRoot
 $env:PKG_CONFIG_PATH = $pkgConfigPath
 Add-PathEntry -Entry $gstreamerBin
+Disable-GioOptionalModules
 
 Write-Host "GStreamer environment is active for this PowerShell process."
 Write-Host "Root: $gstreamerRoot"

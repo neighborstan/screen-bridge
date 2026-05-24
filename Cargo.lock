@@ -797,7 +797,12 @@ dependencies = [
 name = "screen-bridge-viewer"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
+ "clap",
+ "ctrlc",
+ "gstreamer",
  "screen-bridge-core",
+ "tracing",
 ]
 
 [[package]]
