@@ -23,6 +23,40 @@ ScreenBridge - Windows-приложение для просмотра экран
 Exit code `0` - окружение готово. Exit code `1` - есть критическая проблема,
 которую нужно исправить перед GStreamer smoke.
 
+## Host RTSP server
+
+Создайте локальный config из примера:
+
+```powershell
+Copy-Item config\host.example.toml config\host.local.toml
+```
+
+`config\host.local.toml` игнорируется Git, потому что может содержать настоящий
+token.
+
+Перед запуском измените:
+
+- `security.access_token` - secret token не короче 16 символов, не placeholder.
+- `security.allow_subnet` - разрешенная IPv4 subnet, например
+  `"192.168.1.0/24"`. Значение `"any"` отключает subnet filtering и дает
+  warning.
+- `server.bind_ip` - можно оставить закомментированным для автоматического
+  выбора LAN IPv4 или задать явно.
+
+Запуск host:
+
+```powershell
+.\scripts\env-gstreamer.ps1
+cargo run -p screen-bridge-host -- --config config\host.local.toml
+```
+
+Host печатает bind address, path, RTSP URL, Basic auth user и masked token.
+RTSP Basic auth обязателен, `server.max_clients = 1` enforced, clients вне
+`security.allow_subnet` отклоняются.
+
+В VLC на другом компьютере в LAN откройте RTSP URL, который напечатал host.
+Используйте RTSP/TCP transport и Basic auth credentials из config.
+
 ## GStreamer smoke
 
 Локальная проверка захвата экрана:

@@ -1,45 +1,47 @@
 //! Host runtime для публикации screen stream через RTSP.
-//!
-//! На этом этапе host поднимает GStreamer RTSP server без auth/security.
-//! Basic auth, `max_clients` enforcement и `allow_subnet` добавляются
-//! отдельным hardening-этапом.
 
 #![warn(missing_docs)]
 
+mod auth;
+mod peer_ip;
 mod pipeline;
 mod server;
+mod session_limit;
+mod subnet_guard;
 
 use anyhow::{Context, Result};
-use screen_bridge_core::config::{ConfigWarning, HostConfig};
+use screen_bridge_core::config::HostConfig;
 use screen_bridge_core::net;
 
 use crate::pipeline::GstElementAvailability;
 use crate::server::HostServer;
+use crate::subnet_guard::SubnetGuard;
 
 /// Запускает host RTSP server по уже загруженному и проверенному config.
 pub fn run(config: HostConfig) -> Result<()> {
+    let subnet_guard = SubnetGuard::new(&config.security.allow_subnet)?;
     gstreamer::init().context("не удалось инициализировать GStreamer")?;
 
     let bind_ip = select_bind_ip(&config)?;
     let availability = GstElementAvailability;
     let launch = pipeline::build_launch_string(&config.video, &config.capture, &availability)?;
-    let server = HostServer::start(bind_ip, &config.server, &launch)?;
-
-    if config.has_warning(ConfigWarning::AllowSubnetAny) {
-        tracing::warn!(
-            "security.allow_subnet = \"any\"; subnet filtering is disabled by explicit config"
-        );
-    }
-
-    tracing::warn!(
-        "RTSP auth/security is disabled in feat-host-pipeline and will be added in the next feature"
-    );
+    let server = HostServer::start(
+        bind_ip,
+        &config.server,
+        &config.security,
+        &subnet_guard,
+        &launch,
+    )?;
+    subnet_guard.log_startup_warning_if_any();
 
     println!("ScreenBridge host is ready.");
     println!("Bind: {}:{}", server.bind_ip(), server.port());
     println!("Path: {}", server.stream_path());
     println!("RTSP URL: {}", server.rtsp_url());
-    println!("Auth: disabled for current host-pipeline milestone");
+    println!(
+        "Auth: Basic user={}, token={}",
+        config.security.auth_user, config.security.access_token
+    );
     println!("Press Ctrl+C to stop.");
 
     server.run_until_ctrl_c()?;
