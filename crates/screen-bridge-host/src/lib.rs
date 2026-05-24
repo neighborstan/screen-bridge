@@ -3,15 +3,20 @@
 #![warn(missing_docs)]
 
 mod auth;
+mod diagnose;
 mod peer_ip;
 mod pipeline;
 mod server;
 mod session_limit;
 mod subnet_guard;
+mod url;
 
 use anyhow::{Context, Result};
 use screen_bridge_core::config::HostConfig;
 use screen_bridge_core::net;
+
+pub use diagnose::{diagnose, DiagnosticReport};
+pub use url::{build_masked_rtsp_url, build_vlc_url};
 
 use crate::pipeline::GstElementAvailability;
 use crate::server::HostServer;
@@ -22,7 +27,7 @@ pub fn run(config: HostConfig) -> Result<()> {
     let subnet_guard = SubnetGuard::new(&config.security.allow_subnet)?;
     gstreamer::init().context("не удалось инициализировать GStreamer")?;
 
-    let bind_ip = select_bind_ip(&config)?;
+    let bind_ip = resolve_bind_ip(&config)?;
     let availability = GstElementAvailability;
     let launch = pipeline::build_launch_string(&config.video, &config.capture, &availability)?;
     let server = HostServer::start(
@@ -37,10 +42,17 @@ pub fn run(config: HostConfig) -> Result<()> {
     println!("ScreenBridge host is ready.");
     println!("Bind: {}:{}", server.bind_ip(), server.port());
     println!("Path: {}", server.stream_path());
-    println!("RTSP URL: {}", server.rtsp_url());
+    println!(
+        "RTSP URL: {}",
+        build_masked_rtsp_url(&config, server.bind_ip())
+    );
     println!(
         "Auth: Basic user={}, token={}",
         config.security.auth_user, config.security.access_token
+    );
+    println!(
+        "Firewall: allow inbound TCP port {} for remote LAN clients if VLC cannot connect.",
+        server.port()
     );
     println!("Press Ctrl+C to stop.");
 
@@ -49,7 +61,8 @@ pub fn run(config: HostConfig) -> Result<()> {
     Ok(())
 }
 
-fn select_bind_ip(config: &HostConfig) -> Result<std::net::Ipv4Addr> {
+/// Возвращает IPv4, на котором host должен слушать RTSP.
+pub fn resolve_bind_ip(config: &HostConfig) -> Result<std::net::Ipv4Addr> {
     if let Some(bind_ip) = config.server.bind_ip {
         return Ok(bind_ip);
     }
