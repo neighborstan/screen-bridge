@@ -50,12 +50,24 @@ token.
 cargo run -p screen-bridge-host -- --config config\host.local.toml
 ```
 
-Host печатает bind address, path, RTSP URL, Basic auth user и masked token.
+Host печатает bind address, path, masked RTSP URL, Basic auth user и masked token.
 RTSP Basic auth обязателен, `server.max_clients = 1` enforced, clients вне
 `security.allow_subnet` отклоняются.
 
-В VLC на другом компьютере в LAN откройте RTSP URL, который напечатал host.
-Используйте RTSP/TCP transport и Basic auth credentials из config.
+Проверка host diagnostics:
+
+```powershell
+cargo run -p screen-bridge-host -- --diagnose --config config\host.local.toml
+```
+
+Полный VLC URL с token выводится только явной командой:
+
+```powershell
+cargo run -p screen-bridge-host -- --print-vlc-url --config config\host.local.toml
+```
+
+В VLC на другом компьютере в LAN откройте этот URL и используйте RTSP/TCP
+transport.
 
 ## GStreamer smoke
 

@@ -91,6 +91,13 @@ fn select_encoder(video: &VideoConfig, availability: &impl ElementAvailability) 
     }
 }
 
+pub(crate) fn select_encoder_element_name(
+    video: &VideoConfig,
+    availability: &impl ElementAvailability,
+) -> Result<&'static str> {
+    Ok(select_encoder(video, availability)?.element_name())
+}
+
 fn build_d3d11_encoder_launch_string(
     video: &VideoConfig,
     capture: &CaptureConfig,
