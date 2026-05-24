@@ -8,6 +8,8 @@ mod cli;
 use cli::Cli;
 
 fn main() -> Result<()> {
+    screen_bridge_core::runtime::configure_bundled_gstreamer_environment();
+
     let cli = Cli::parse();
     let config = load_viewer(&cli.config).with_context(|| {
         format!(

@@ -23,6 +23,28 @@ ScreenBridge - Windows-приложение для просмотра экран
 Exit code `0` - окружение готово. Exit code `1` - есть критическая проблема,
 которую нужно исправить перед GStreamer smoke.
 
+## Сборка installer
+
+```powershell
+.\scripts\build-installer.ps1
+```
+
+Скрипт проверяет prerequisites, при отсутствии Inno Setup 6 предложит
+установить его через `winget`, соберет release binaries и упакует app-local
+GStreamer runtime.
+
+Готовый installer появится в `dist\`:
+
+```text
+dist\ScreenBridge-0.1.0-windows-x64-setup.exe
+```
+
+Если нужно только проверить prereqs без автоматической установки tools:
+
+```powershell
+.\scripts\build-installer.ps1 -NoInstallMissingTools
+```
+
 ## Host RTSP server
 
 Создайте локальный config из примера:
@@ -137,4 +159,4 @@ rtsp://<host-ip>:8554/screen
 
 ## Лицензия
 
-MIT. См. `LICENSE`.
+Проект распространяется по лицензии MIT. См. `LICENSE`.
