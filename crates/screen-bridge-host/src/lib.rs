@@ -3,6 +3,7 @@
 #![warn(missing_docs)]
 
 mod auth;
+mod peer_ip;
 mod pipeline;
 mod server;
 mod session_limit;
@@ -19,7 +20,6 @@ use crate::subnet_guard::SubnetGuard;
 /// Запускает host RTSP server по уже загруженному и проверенному config.
 pub fn run(config: HostConfig) -> Result<()> {
     let subnet_guard = SubnetGuard::new(&config.security.allow_subnet)?;
-    subnet_guard.ensure_supported_by_safe_api()?;
     gstreamer::init().context("не удалось инициализировать GStreamer")?;
 
     let bind_ip = select_bind_ip(&config)?;

@@ -1,12 +1,20 @@
 //! Проверка `allow_subnet` для входящих RTSP clients.
 
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result};
 use screen_bridge_core::net::{self, Subnet};
+
+use crate::peer_ip::PeerAddress;
 
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub(crate) struct SubnetGuard {
     config_value: String,
     subnet: Subnet,
+}
+
+#[derive(Debug, Clone, Eq, PartialEq)]
+pub(crate) enum SubnetDecision {
+    Allow,
+    Reject { reason: String },
 }
 
 impl SubnetGuard {
@@ -21,27 +29,35 @@ impl SubnetGuard {
         })
     }
 
-    pub(crate) fn ensure_supported_by_safe_api(&self) -> Result<()> {
-        if self.is_any() {
-            return Ok(());
-        }
-
-        bail!(
-            "security.allow_subnet = \"{}\" требует peer IP, но safe Rust bindings \
-             gstreamer-rtsp-server 0.25.2 не раскрывают RTSPClient connection; \
-             временно задайте allow_subnet = \"any\" для явного opt-out или примите \
-             отдельное решение по минимальному FFI",
-            self.config_value
-        )
-    }
-
     pub(crate) fn is_any(&self) -> bool {
         matches!(self.subnet, Subnet::Any)
     }
 
-    #[cfg(test)]
-    fn check_peer(&self, peer_ip: std::net::Ipv4Addr) -> bool {
-        net::matches_subnet(peer_ip, &self.subnet)
+    pub(crate) fn check_peer(&self, peer_address: &PeerAddress) -> SubnetDecision {
+        match (&self.subnet, peer_address) {
+            (Subnet::Any, _) => SubnetDecision::Allow,
+            (Subnet::V4(_), PeerAddress::Unavailable) => SubnetDecision::Reject {
+                reason: format!(
+                    "peer IP is unavailable, cannot enforce security.allow_subnet = \"{}\"",
+                    self.config_value
+                ),
+            },
+            (Subnet::V4(_), PeerAddress::Unsupported(value)) => SubnetDecision::Reject {
+                reason: format!(
+                    "peer address \"{value}\" is not supported by IPv4 security.allow_subnet = \"{}\"",
+                    self.config_value
+                ),
+            },
+            (Subnet::V4(_), PeerAddress::V4(ip)) if net::matches_subnet(*ip, &self.subnet) => {
+                SubnetDecision::Allow
+            }
+            (Subnet::V4(_), PeerAddress::V4(ip)) => SubnetDecision::Reject {
+                reason: format!(
+                    "peer IP {ip} is outside security.allow_subnet = \"{}\"",
+                    self.config_value
+                ),
+            },
+        }
     }
 
     pub(crate) fn log_startup_warning_if_any(&self) {
@@ -52,9 +68,10 @@ impl SubnetGuard {
         }
     }
 
-    pub(crate) fn log_client_warning_if_any(&self) {
+    pub(crate) fn log_client_warning_if_any(&self, peer_address: &PeerAddress) {
         if self.is_any() {
             tracing::warn!(
+                peer = %peer_address,
                 "RTSP client connection observed; security.allow_subnet = \"any\" accepts clients without subnet filtering"
             );
         }
@@ -68,40 +85,50 @@ mod tests {
     use super::*;
 
     #[test]
-    fn guard_should_accept_any_without_startup_blocker() {
+    fn guard_should_accept_any_for_unavailable_peer() {
         // Given
         let guard = SubnetGuard::new("any").unwrap();
 
         // When
-        let result = guard.ensure_supported_by_safe_api();
+        let result = guard.check_peer(&PeerAddress::Unavailable);
 
         // Then
-        assert!(result.is_ok());
-        assert!(guard.check_peer(Ipv4Addr::new(203, 0, 113, 10)));
+        assert_eq!(result, SubnetDecision::Allow);
     }
 
     #[test]
-    fn guard_should_block_cidr_until_peer_ip_safe_api_exists() {
+    fn guard_should_allow_peer_inside_cidr() {
         // Given
         let guard = SubnetGuard::new("192.168.1.0/24").unwrap();
 
         // When
-        let result = guard.ensure_supported_by_safe_api();
+        let result = guard.check_peer(&PeerAddress::V4(Ipv4Addr::new(192, 168, 1, 42)));
 
         // Then
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("RTSPClient connection"));
+        assert_eq!(result, SubnetDecision::Allow);
     }
 
     #[test]
-    fn guard_should_match_peer_against_cidr() {
+    fn guard_should_reject_peer_outside_cidr() {
         // Given
         let guard = SubnetGuard::new("192.168.1.0/24").unwrap();
 
-        // When / Then
-        assert!(guard.check_peer(Ipv4Addr::new(192, 168, 1, 42)));
-        assert!(!guard.check_peer(Ipv4Addr::new(192, 168, 2, 42)));
+        // When
+        let result = guard.check_peer(&PeerAddress::V4(Ipv4Addr::new(192, 168, 2, 42)));
+
+        // Then
+        assert!(matches!(result, SubnetDecision::Reject { .. }));
+    }
+
+    #[test]
+    fn guard_should_reject_unavailable_peer_for_cidr() {
+        // Given
+        let guard = SubnetGuard::new("192.168.1.0/24").unwrap();
+
+        // When
+        let result = guard.check_peer(&PeerAddress::Unavailable);
+
+        // Then
+        assert!(matches!(result, SubnetDecision::Reject { .. }));
     }
 }

@@ -9,8 +9,9 @@ use gstreamer_rtsp_server::{glib, RTSPAuth, RTSPMediaFactory, RTSPServer, RTSPSe
 use screen_bridge_core::config::{SecurityConfig, ServerConfig};
 
 use crate::auth;
+use crate::peer_ip::{self, PeerAddress};
 use crate::session_limit;
-use crate::subnet_guard::SubnetGuard;
+use crate::subnet_guard::{SubnetDecision, SubnetGuard};
 
 pub(crate) struct HostServer {
     bind_ip: Ipv4Addr,
@@ -105,13 +106,33 @@ fn install_client_hooks(
     let subnet_guard = subnet_guard.clone();
     let session_pool = session_pool.clone();
     server.connect_client_connected(move |_server, client| {
-        tracing::info!(
-            "RTSP client connected; peer IP is unavailable through safe gstreamer-rtsp-server bindings"
-        );
-        subnet_guard.log_client_warning_if_any();
+        let peer_address = peer_ip::client_peer_address(client);
+        match subnet_guard.check_peer(&peer_address) {
+            SubnetDecision::Allow => {
+                tracing::info!(peer = %peer_address, "RTSP client connected");
+                subnet_guard.log_client_warning_if_any(&peer_address);
+            }
+            SubnetDecision::Reject { ref reason } => {
+                tracing::warn!(
+                    peer = %peer_address,
+                    reason = reason.as_str(),
+                    "RTSP client will be rejected by subnet guard"
+                );
+            }
+        }
+
+        install_subnet_request_hooks(client, &subnet_guard, peer_address.clone());
 
         let session_pool_for_setup = session_pool.clone();
+        let subnet_guard_for_setup = subnet_guard.clone();
+        let peer_address_for_setup = peer_address.clone();
         client.connect_pre_setup_request(move |_client, context| {
+            if let Some(status) =
+                subnet_rejection_status(&subnet_guard_for_setup, &peer_address_for_setup, "SETUP")
+            {
+                return status;
+            }
+
             let active_sessions = session_pool_for_setup.n_sessions();
             let has_existing_session = context.session().is_some();
 
@@ -135,4 +156,50 @@ fn install_client_hooks(
             tracing::info!("RTSP client closed");
         });
     });
+}
+
+fn install_subnet_request_hooks(
+    client: &gstreamer_rtsp_server::RTSPClient,
+    subnet_guard: &SubnetGuard,
+    peer_address: PeerAddress,
+) {
+    let options_guard = subnet_guard.clone();
+    let options_peer = peer_address.clone();
+    client.connect_pre_options_request(move |_client, _context| {
+        subnet_rejection_status(&options_guard, &options_peer, "OPTIONS")
+            .unwrap_or(gst_rtsp::RTSPStatusCode::Ok)
+    });
+
+    let describe_guard = subnet_guard.clone();
+    let describe_peer = peer_address.clone();
+    client.connect_pre_describe_request(move |_client, _context| {
+        subnet_rejection_status(&describe_guard, &describe_peer, "DESCRIBE")
+            .unwrap_or(gst_rtsp::RTSPStatusCode::Ok)
+    });
+
+    let play_guard = subnet_guard.clone();
+    let play_peer = peer_address.clone();
+    client.connect_pre_play_request(move |_client, _context| {
+        subnet_rejection_status(&play_guard, &play_peer, "PLAY")
+            .unwrap_or(gst_rtsp::RTSPStatusCode::Ok)
+    });
+}
+
+fn subnet_rejection_status(
+    subnet_guard: &SubnetGuard,
+    peer_address: &PeerAddress,
+    method: &str,
+) -> Option<gst_rtsp::RTSPStatusCode> {
+    match subnet_guard.check_peer(peer_address) {
+        SubnetDecision::Allow => None,
+        SubnetDecision::Reject { reason } => {
+            tracing::warn!(
+                peer = %peer_address,
+                reason = reason.as_str(),
+                method,
+                "RTSP request rejected by subnet guard"
+            );
+            Some(gst_rtsp::RTSPStatusCode::Forbidden)
+        }
+    }
 }
