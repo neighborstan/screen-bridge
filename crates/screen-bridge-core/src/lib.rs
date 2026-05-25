@@ -13,6 +13,9 @@ pub mod logging;
 /// Помощники для локальных IPv4 и subnet allowlist.
 pub mod net;
 
+/// Настройка runtime окружения для app-local installer layout.
+pub mod runtime;
+
 /// Безопасное отображение secret values.
 pub mod secret;
 

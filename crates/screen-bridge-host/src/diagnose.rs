@@ -257,9 +257,27 @@ fn check_gstreamer_root(report: &mut DiagnosticReport) {
         ),
     }
 
-    match env::var("GST_PLUGIN_PATH") {
-        Ok(path) if !path.trim().is_empty() => report.info("GStreamer plugin path", path),
-        _ => report.info("GStreamer plugin path", "GST_PLUGIN_PATH is not set"),
+    match env::var("GST_PLUGIN_SYSTEM_PATH_1_0").or_else(|_| env::var("GST_PLUGIN_SYSTEM_PATH")) {
+        Ok(path) if !path.trim().is_empty() => {
+            report.info("GStreamer system plugin path", path);
+        }
+        _ => report.info(
+            "GStreamer system plugin path",
+            "GST_PLUGIN_SYSTEM_PATH_1_0 is not set",
+        ),
+    }
+
+    match env::var("GST_PLUGIN_PATH_1_0").or_else(|_| env::var("GST_PLUGIN_PATH")) {
+        Ok(path) if !path.trim().is_empty() => report.info("GStreamer extra plugin path", path),
+        _ => report.info(
+            "GStreamer extra plugin path",
+            "GST_PLUGIN_PATH_1_0 is not set",
+        ),
+    }
+
+    match env::var("PKG_CONFIG_PATH") {
+        Ok(path) if !path.trim().is_empty() => report.info("pkg-config path", path),
+        _ => report.info("pkg-config path", "PKG_CONFIG_PATH is not set"),
     }
 }
 
@@ -359,7 +377,8 @@ fn check_port(report: &mut DiagnosticReport, bind_ip: Ipv4Addr, port: u16) {
 }
 
 fn command_output(command: &str, args: &[&str]) -> Result<String, String> {
-    let output = Command::new(command)
+    let executable = find_application(&[command]).unwrap_or_else(|| PathBuf::from(command));
+    let output = Command::new(&executable)
         .args(args)
         .output()
         .map_err(|error| format!("{command} failed to start: {error}"))?;
@@ -379,7 +398,6 @@ fn command_output(command: &str, args: &[&str]) -> Result<String, String> {
 }
 
 fn find_application(names: &[&str]) -> Option<PathBuf> {
-    let path_var = env::var_os("PATH")?;
     let path_ext = env::var_os("PATHEXT")
         .map(|value| {
             env::split_paths(&value)
@@ -388,7 +406,7 @@ fn find_application(names: &[&str]) -> Option<PathBuf> {
         })
         .unwrap_or_else(|| vec![".EXE".to_owned()]);
 
-    for directory in env::split_paths(&path_var) {
+    for directory in application_search_directories() {
         for name in names {
             let candidate = directory.join(name);
             if candidate.is_file() {
@@ -407,6 +425,25 @@ fn find_application(names: &[&str]) -> Option<PathBuf> {
     }
 
     None
+}
+
+fn application_search_directories() -> Vec<PathBuf> {
+    let mut directories = Vec::new();
+
+    let root =
+        env::var("GSTREAMER_1_0_ROOT_MSVC_X86_64").or_else(|_| env::var("GSTREAMER_ROOT_X86_64"));
+    if let Ok(root) = root {
+        let bundled_bin = PathBuf::from(root).join("bin");
+        if bundled_bin.is_dir() {
+            directories.push(bundled_bin);
+        }
+    }
+
+    if let Some(path_var) = env::var_os("PATH") {
+        directories.extend(env::split_paths(&path_var));
+    }
+
+    directories
 }
 
 fn working_directory() -> String {
