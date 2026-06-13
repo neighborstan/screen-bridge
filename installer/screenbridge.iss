@@ -41,6 +41,7 @@ Type: filesandordirs; Name: "{app}\bin"
 Type: filesandordirs; Name: "{app}\etc"
 Type: filesandordirs; Name: "{app}\lib"
 Type: filesandordirs; Name: "{app}\libexec"
+Type: filesandordirs; Name: "{app}\scripts"
 Type: filesandordirs; Name: "{app}\share"
 Type: filesandordirs; Name: "{app}\config"
 Type: filesandordirs; Name: "{app}\assets"
@@ -51,6 +52,8 @@ Source: "{#ProjectRoot}\target\release\screen-bridge-host.exe"; DestDir: "{app}\
 Source: "{#ProjectRoot}\target\release\screen-bridge-viewer.exe"; DestDir: "{app}\bin"; Flags: ignoreversion
 Source: "{#ProjectRoot}\installer\launch-host.cmd"; DestDir: "{app}\bin"; Flags: ignoreversion
 Source: "{#ProjectRoot}\installer\launch-viewer.cmd"; DestDir: "{app}\bin"; Flags: ignoreversion
+Source: "{#ProjectRoot}\installer\allow-host-firewall.cmd"; DestDir: "{app}\bin"; Flags: ignoreversion
+Source: "{#ProjectRoot}\scripts\add-firewall-rule.ps1"; DestDir: "{app}\scripts"; Flags: ignoreversion
 Source: "{#ProjectRoot}\installer\assets\screenbridge.ico"; DestDir: "{app}\assets"; Flags: ignoreversion
 Source: "{#ProjectRoot}\README.md"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#ProjectRoot}\LICENSE"; DestDir: "{app}"; Flags: ignoreversion
@@ -75,5 +78,6 @@ Source: "{#GStreamerRoot}\share\licenses\*"; DestDir: "{app}\share\licenses"; Fl
 [Icons]
 Name: "{group}\ScreenBridge Host"; Filename: "{app}\bin\launch-host.cmd"; WorkingDir: "{userappdata}\ScreenBridge"; IconFilename: "{app}\assets\screenbridge.ico"
 Name: "{group}\ScreenBridge Viewer"; Filename: "{app}\bin\launch-viewer.cmd"; WorkingDir: "{userappdata}\ScreenBridge"; IconFilename: "{app}\assets\screenbridge.ico"
+Name: "{group}\ScreenBridge Allow Host Firewall"; Filename: "{app}\bin\allow-host-firewall.cmd"; WorkingDir: "{userappdata}\ScreenBridge"; IconFilename: "{app}\assets\screenbridge.ico"
 Name: "{group}\ScreenBridge Config"; Filename: "{userappdata}\ScreenBridge"; IconFilename: "{app}\assets\screenbridge.ico"
 Name: "{group}\Uninstall ScreenBridge"; Filename: "{uninstallexe}"; IconFilename: "{app}\assets\screenbridge.ico"

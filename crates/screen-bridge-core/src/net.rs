@@ -1,7 +1,9 @@
 //! Помощники для LAN IPv4 и subnet allowlist.
 
-use std::net::Ipv4Addr;
+use std::io::ErrorKind;
+use std::net::{Ipv4Addr, TcpStream, ToSocketAddrs};
 use std::str::FromStr;
+use std::time::Duration;
 
 use if_addrs::{get_if_addrs, IfAddr};
 use ipnet::Ipv4Net;
@@ -46,6 +48,56 @@ pub enum LocalIpError {
     /// OS не вернула список network interfaces.
     #[error("не удалось получить локальные IPv4 interfaces: {0}")]
     Query(#[from] std::io::Error),
+}
+
+#[derive(Debug, Error)]
+/// Ошибка TCP preflight подключения к host.
+pub enum TcpPreflightError {
+    /// Hostname или address не удалось resolved в socket addresses.
+    #[error("не удалось resolved TCP target {host}:{port}: {source}")]
+    Resolve {
+        /// Hostname или IP из config.
+        host: String,
+        /// TCP port из config.
+        port: u16,
+        /// Ошибка OS resolver.
+        source: std::io::Error,
+    },
+    /// Resolver не вернул ни одного socket address.
+    #[error("TCP target {host}:{port} не дал socket addresses")]
+    NoAddresses {
+        /// Hostname или IP из config.
+        host: String,
+        /// TCP port из config.
+        port: u16,
+    },
+    /// TCP connect не прошел ни к одному resolved address.
+    #[error("TCP connect to {host}:{port} failed within {timeout_ms} ms: {attempts}")]
+    Connect {
+        /// Hostname или IP из config.
+        host: String,
+        /// TCP port из config.
+        port: u16,
+        /// Timeout одной TCP connect попытки.
+        timeout_ms: u128,
+        /// Категория TCP connect failure для user-facing диагностики.
+        kind: TcpPreflightConnectKind,
+        /// Ошибки по resolved socket addresses.
+        attempts: String,
+    },
+}
+
+#[derive(Debug, Clone, Copy, Eq, PartialEq)]
+/// Категория сбоя TCP preflight подключения.
+pub enum TcpPreflightConnectKind {
+    /// Endpoint явно отказал в соединении.
+    Refused,
+    /// Connect не получил ответа до timeout.
+    Timeout,
+    /// Сеть или host недоступны по маршрутизации.
+    Unreachable,
+    /// OS вернула другую ошибку.
+    Other,
 }
 
 /// Разбирает `allow_subnet` из config.
@@ -96,6 +148,76 @@ pub fn local_ipv4() -> Result<Vec<Ipv4Addr>, LocalIpError> {
     Ok(addresses)
 }
 
+/// Проверяет, что TCP endpoint отвечает до запуска более дорогого playback.
+pub fn check_tcp_connect(
+    host: &str,
+    port: u16,
+    timeout: Duration,
+) -> Result<(), TcpPreflightError> {
+    let addresses = (host, port)
+        .to_socket_addrs()
+        .map_err(|source| TcpPreflightError::Resolve {
+            host: host.to_owned(),
+            port,
+            source,
+        })?
+        .collect::<Vec<_>>();
+
+    if addresses.is_empty() {
+        return Err(TcpPreflightError::NoAddresses {
+            host: host.to_owned(),
+            port,
+        });
+    }
+
+    let mut attempts = Vec::new();
+    let mut error_kinds = Vec::new();
+    for address in addresses {
+        match TcpStream::connect_timeout(&address, timeout) {
+            Ok(_) => return Ok(()),
+            Err(error) => {
+                error_kinds.push(error.kind());
+                attempts.push(format!("{address}: {error}"));
+            }
+        }
+    }
+
+    Err(TcpPreflightError::Connect {
+        host: host.to_owned(),
+        port,
+        timeout_ms: timeout.as_millis(),
+        kind: classify_tcp_connect_failure(&error_kinds),
+        attempts: attempts.join("; "),
+    })
+}
+
+fn classify_tcp_connect_failure(kinds: &[ErrorKind]) -> TcpPreflightConnectKind {
+    if kinds.iter().any(|kind| matches!(kind, ErrorKind::TimedOut)) {
+        return TcpPreflightConnectKind::Timeout;
+    }
+
+    if kinds
+        .iter()
+        .any(|kind| matches!(kind, ErrorKind::ConnectionRefused))
+    {
+        return TcpPreflightConnectKind::Refused;
+    }
+
+    if kinds.iter().all(|kind| {
+        matches!(
+            kind,
+            ErrorKind::AddrNotAvailable
+                | ErrorKind::HostUnreachable
+                | ErrorKind::NetworkDown
+                | ErrorKind::NetworkUnreachable
+        )
+    }) {
+        return TcpPreflightConnectKind::Unreachable;
+    }
+
+    TcpPreflightConnectKind::Other
+}
+
 /// Проверяет, подходит ли IPv4 address для автоматического bind в LAN.
 pub fn is_usable_lan_ipv4(ip: Ipv4Addr) -> bool {
     ip.is_private()
@@ -109,6 +231,7 @@ pub fn is_usable_lan_ipv4(ip: Ipv4Addr) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::net::TcpListener;
 
     #[test]
     fn parse_subnet_should_accept_any() {
@@ -191,6 +314,55 @@ mod tests {
         assert!(!is_usable_lan_ipv4(Ipv4Addr::new(169, 254, 1, 10)));
         assert!(!is_usable_lan_ipv4(Ipv4Addr::new(8, 8, 8, 8)));
         assert!(is_usable_lan_ipv4(Ipv4Addr::new(192, 168, 1, 25)));
+    }
+
+    #[test]
+    fn check_tcp_connect_should_accept_local_listener() {
+        // Given
+        let listener = TcpListener::bind((Ipv4Addr::LOCALHOST, 0)).unwrap();
+        let port = listener.local_addr().unwrap().port();
+
+        // When
+        let result = check_tcp_connect("127.0.0.1", port, Duration::from_millis(500));
+
+        // Then
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn classify_tcp_connect_failure_should_prefer_timeout() {
+        // Given
+        let kinds = [ErrorKind::NetworkUnreachable, ErrorKind::TimedOut];
+
+        // When
+        let result = classify_tcp_connect_failure(&kinds);
+
+        // Then
+        assert_eq!(result, TcpPreflightConnectKind::Timeout);
+    }
+
+    #[test]
+    fn classify_tcp_connect_failure_should_detect_refused_port() {
+        // Given
+        let kinds = [ErrorKind::ConnectionRefused];
+
+        // When
+        let result = classify_tcp_connect_failure(&kinds);
+
+        // Then
+        assert_eq!(result, TcpPreflightConnectKind::Refused);
+    }
+
+    #[test]
+    fn classify_tcp_connect_failure_should_detect_unreachable_host() {
+        // Given
+        let kinds = [ErrorKind::HostUnreachable, ErrorKind::NetworkUnreachable];
+
+        // When
+        let result = classify_tcp_connect_failure(&kinds);
+
+        // Then
+        assert_eq!(result, TcpPreflightConnectKind::Unreachable);
     }
 
     #[test]

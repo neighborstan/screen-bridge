@@ -4,15 +4,19 @@ use std::fmt;
 use std::sync::mpsc;
 use std::time::Duration;
 
-use anyhow::{Context, Result};
+use anyhow::{bail, Context, Result};
 use gstreamer::prelude::*;
 use gstreamer::{self as gst, MessageView};
 use screen_bridge_core::config::ViewerConfig;
+use screen_bridge_core::net::{self, TcpPreflightConnectKind, TcpPreflightError};
 
 use crate::pipeline::{self, VideoSink, ViewerLaunch};
 
+const TCP_PREFLIGHT_TIMEOUT: Duration = Duration::from_secs(3);
+
 /// Запускает viewer playback по уже загруженному и проверенному config.
 pub fn run(config: ViewerConfig) -> Result<()> {
+    check_rtsp_tcp_preflight(&config)?;
     gst::init().context("не удалось инициализировать GStreamer")?;
 
     let (stop_sender, stop_receiver) = mpsc::channel();
@@ -33,6 +37,65 @@ pub fn run(config: ViewerConfig) -> Result<()> {
             run_launch(&fallback, &config, &stop_receiver).map_err(Into::into)
         }
         Err(error) => Err(error.into()),
+    }
+}
+
+fn check_rtsp_tcp_preflight(config: &ViewerConfig) -> Result<()> {
+    let host = &config.connection.host;
+    let port = config.connection.port;
+
+    match net::check_tcp_connect(host, port, TCP_PREFLIGHT_TIMEOUT) {
+        Ok(()) => {
+            tracing::info!(
+                host,
+                port,
+                "RTSP host TCP preflight succeeded before GStreamer playback"
+            );
+            Ok(())
+        }
+        Err(error) => {
+            let message = tcp_preflight_failure_message(config, &error);
+            tracing::warn!(host, port, error = error.to_string(), message);
+            bail!("{message}");
+        }
+    }
+}
+
+fn tcp_preflight_failure_message(config: &ViewerConfig, error: &TcpPreflightError) -> String {
+    let host = &config.connection.host;
+    let port = config.connection.port;
+    let stage = tcp_preflight_failure_stage(error);
+
+    format!(
+        "не удалось подключиться к RTSP host по TCP до запуска GStreamer: {host}:{port}. \
+         Стадия: {stage}. Причина: {error}. Если host запущен и IP/port указаны верно, проверьте Windows Firewall \
+         на host-компьютере: разрешите inbound TCP port {port} для ScreenBridge Host. \
+         На viewer-компьютере проверка: Test-NetConnection -ComputerName {host} -Port {port}. \
+         В установленной версии используйте shortcut \"ScreenBridge Allow Host Firewall\" на host-компьютере."
+    )
+}
+
+fn tcp_preflight_failure_stage(error: &TcpPreflightError) -> &'static str {
+    match error {
+        TcpPreflightError::Resolve { .. } | TcpPreflightError::NoAddresses { .. } => {
+            "host/IP не удалось разрешить"
+        }
+        TcpPreflightError::Connect {
+            kind: TcpPreflightConnectKind::Refused,
+            ..
+        } => "TCP port закрыт или host process не слушает этот адрес",
+        TcpPreflightError::Connect {
+            kind: TcpPreflightConnectKind::Timeout,
+            ..
+        } => "TCP timeout, часто это inbound firewall block на host",
+        TcpPreflightError::Connect {
+            kind: TcpPreflightConnectKind::Unreachable,
+            ..
+        } => "host/IP недоступен по сети или маршруту",
+        TcpPreflightError::Connect {
+            kind: TcpPreflightConnectKind::Other,
+            ..
+        } => "TCP connect failed до RTSP auth и playback",
     }
 }
 
@@ -286,5 +349,30 @@ mod tests {
 
         // Then
         assert!(!result);
+    }
+
+    #[test]
+    fn tcp_preflight_failure_message_should_include_firewall_next_action() {
+        // Given
+        let mut config = ViewerConfig::default();
+        config.connection.host = "192.168.1.139".to_owned();
+        config.connection.port = 8554;
+        let error = TcpPreflightError::Connect {
+            host: config.connection.host.clone(),
+            port: config.connection.port,
+            timeout_ms: 3000,
+            kind: TcpPreflightConnectKind::Timeout,
+            attempts: "192.168.1.139:8554: timed out".to_owned(),
+        };
+
+        // When
+        let message = tcp_preflight_failure_message(&config, &error);
+
+        // Then
+        assert!(message.contains("192.168.1.139:8554"));
+        assert!(message.contains("TCP timeout"));
+        assert!(message.contains("Windows Firewall"));
+        assert!(message.contains("Test-NetConnection -ComputerName 192.168.1.139 -Port 8554"));
+        assert!(message.contains("ScreenBridge Allow Host Firewall"));
     }
 }

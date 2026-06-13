@@ -351,14 +351,150 @@ fn check_config_dependent_network(report: &mut DiagnosticReport, config: Option<
             }
             report.info(
                 "Firewall hint",
-                format!(
-                    "New-NetFirewallRule -DisplayName \"ScreenBridge Host RTSP\" -Direction Inbound -Action Allow -Protocol TCP -LocalPort {}",
-                    runtime_config.server.port
-                ),
+                firewall_rule_command(runtime_config.server.port),
             );
+            check_windows_firewall(report, bind_ip, runtime_config.server.port);
         }
         Err(error) => report.fail("Selected bind IP", error.to_string()),
     }
+}
+
+fn check_windows_firewall(report: &mut DiagnosticReport, bind_ip: Ipv4Addr, port: u16) {
+    if !cfg!(windows) {
+        report.info(
+            "Windows Firewall",
+            "skipped because this diagnostic is only available on Windows",
+        );
+        return;
+    }
+
+    match powershell_interface_alias(bind_ip) {
+        Ok(interface_alias) => {
+            report.pass(
+                "Network interface for bind IP",
+                format!("{bind_ip} -> {interface_alias}"),
+            );
+            check_network_profile(report, &interface_alias);
+        }
+        Err(error) => report.warn(
+            "Network interface for bind IP",
+            format!("could not inspect interface for {bind_ip}: {error}"),
+        ),
+    }
+
+    match powershell_firewall_rule_names(port) {
+        Ok(rule_names) if !rule_names.trim().is_empty() => report.pass(
+            "Windows Firewall inbound rule",
+            format!(
+                "enabled allow rule for TCP port {port}: {}",
+                compact_powershell_lines(&rule_names)
+            ),
+        ),
+        Ok(_) => report.warn(
+            "Windows Firewall inbound rule",
+            format!(
+                "no enabled inbound allow rule found for TCP port {port}. {}",
+                firewall_rule_command(port)
+            ),
+        ),
+        Err(error) => report.warn(
+            "Windows Firewall inbound rule",
+            format!(
+                "could not inspect inbound rules for TCP port {port}: {error}. {}",
+                firewall_rule_command(port)
+            ),
+        ),
+    }
+}
+
+fn check_network_profile(report: &mut DiagnosticReport, interface_alias: &str) {
+    match powershell_network_profile(interface_alias) {
+        Ok(profile) if profile.eq_ignore_ascii_case("Public") => report.warn(
+            "Windows network profile",
+            format!(
+                "{interface_alias} is Public; Windows Firewall commonly blocks inbound LAN clients. Use a Private profile for trusted home LAN or run the ScreenBridge firewall shortcut."
+            ),
+        ),
+        Ok(profile) => report.pass(
+            "Windows network profile",
+            format!("{interface_alias} is {profile}"),
+        ),
+        Err(error) => report.warn(
+            "Windows network profile",
+            format!("could not inspect profile for {interface_alias}: {error}"),
+        ),
+    }
+}
+
+fn powershell_interface_alias(bind_ip: Ipv4Addr) -> Result<String, String> {
+    let bind_ip = powershell_single_quoted(&bind_ip.to_string());
+    let script = format!(
+        "$item = Get-NetIPAddress -AddressFamily IPv4 -IPAddress {bind_ip} -ErrorAction SilentlyContinue | Select-Object -First 1; if ($null -eq $item) {{ exit 2 }}; $item.InterfaceAlias"
+    );
+    powershell_output(&script)
+}
+
+fn powershell_network_profile(interface_alias: &str) -> Result<String, String> {
+    let interface_alias = powershell_single_quoted(interface_alias);
+    let script = format!(
+        "$profile = Get-NetConnectionProfile -InterfaceAlias {interface_alias} -ErrorAction SilentlyContinue | Select-Object -First 1; if ($null -eq $profile) {{ exit 2 }}; $profile.NetworkCategory"
+    );
+    powershell_output(&script)
+}
+
+fn powershell_firewall_rule_names(port: u16) -> Result<String, String> {
+    let script = format!(
+        "$matches = Get-NetFirewallRule -Direction Inbound -Enabled True -Action Allow -ErrorAction SilentlyContinue | ForEach-Object {{ $rule = $_; $rule | Get-NetFirewallPortFilter -ErrorAction SilentlyContinue | Where-Object {{ $_.Protocol -eq \"TCP\" -and $_.LocalPort -eq \"{port}\" }} | ForEach-Object {{ $rule.DisplayName }} }}; $matches | Select-Object -Unique -First 5"
+    );
+    powershell_output(&script)
+}
+
+fn powershell_output(script: &str) -> Result<String, String> {
+    let executable = find_application(&["powershell.exe", "pwsh.exe"])
+        .ok_or_else(|| "powershell.exe was not found in PATH".to_owned())?;
+    let output = Command::new(&executable)
+        .args([
+            "-NoProfile",
+            "-NonInteractive",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-Command",
+            script,
+        ])
+        .output()
+        .map_err(|error| format!("powershell.exe failed to start: {error}"))?;
+
+    let stdout = String::from_utf8_lossy(&output.stdout).trim().to_owned();
+    let stderr = String::from_utf8_lossy(&output.stderr).trim().to_owned();
+
+    if output.status.success() {
+        return Ok(stdout);
+    }
+
+    let message = if stderr.is_empty() { stdout } else { stderr };
+    Err(format!(
+        "powershell.exe exited with {}: {message}",
+        output.status
+    ))
+}
+
+fn powershell_single_quoted(value: &str) -> String {
+    format!("'{}'", value.replace('\'', "''"))
+}
+
+fn compact_powershell_lines(output: &str) -> String {
+    output
+        .lines()
+        .map(str::trim)
+        .filter(|line| !line.is_empty())
+        .collect::<Vec<_>>()
+        .join(", ")
+}
+
+fn firewall_rule_command(port: u16) -> String {
+    format!(
+        "Run installed shortcut \"ScreenBridge Allow Host Firewall\" on the host, or run elevated PowerShell: powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\\scripts\\add-firewall-rule.ps1 -Port {port} -Profile Any"
+    )
 }
 
 fn check_port(report: &mut DiagnosticReport, bind_ip: Ipv4Addr, port: u16) {
@@ -450,4 +586,44 @@ fn working_directory() -> String {
     env::current_dir()
         .map(|path| path.display().to_string())
         .unwrap_or_else(|error| format!("unknown: {error}"))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn powershell_single_quoted_should_escape_single_quotes() {
+        // Given
+        let value = "Ethernet's LAN";
+
+        // When
+        let result = powershell_single_quoted(value);
+
+        // Then
+        assert_eq!(result, "'Ethernet''s LAN'");
+    }
+
+    #[test]
+    fn firewall_rule_command_should_include_port_and_shortcut() {
+        // Given / When
+        let result = firewall_rule_command(8554);
+
+        // Then
+        assert!(result.contains("ScreenBridge Allow Host Firewall"));
+        assert!(result.contains("-Port 8554"));
+        assert!(result.contains("-Profile Any"));
+    }
+
+    #[test]
+    fn compact_powershell_lines_should_join_non_empty_lines() {
+        // Given
+        let output = "Rule A\r\n\r\n Rule B \n";
+
+        // When
+        let result = compact_powershell_lines(output);
+
+        // Then
+        assert_eq!(result, "Rule A, Rule B");
+    }
 }
