@@ -111,6 +111,12 @@ cargo run -p screen-bridge-viewer -- --config config\viewer.local.toml
 Viewer подключается по RTSP/TCP с Basic auth и открывает окно с видео host
 screen.
 
+Для проверки host и viewer на одной машине viewer может подключаться к
+`127.0.0.1`. В этом случае host config должен разрешать loopback:
+`security.allow_subnet = "127.0.0.1/32"` или временно
+`security.allow_subnet = "any"`. Если оставить только LAN subnet, например
+`"192.168.1.0/24"`, host отклонит loopback-клиент с `403 Forbidden`.
+
 ## Если viewer получает timeout
 
 С viewer-компьютера проверьте TCP port host:
