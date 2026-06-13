@@ -1,5 +1,12 @@
 # ScreenBridge
 
+![Version](https://img.shields.io/badge/version-0.1.0-blue)
+![License](https://img.shields.io/badge/license-MIT-green)
+![Platform](https://img.shields.io/badge/platform-Windows%2010%2F11-0078D4)
+![Rust](https://img.shields.io/badge/Rust-1.93%2B-b7410e)
+![GStreamer](https://img.shields.io/badge/GStreamer-1.28.3-655CED)
+![Protocol](https://img.shields.io/badge/protocol-RTSP%2FTCP-lightgrey)
+
 ScreenBridge - Windows-приложение для просмотра экрана другого компьютера в
 домашней LAN.
 
@@ -44,6 +51,29 @@ dist\ScreenBridge-0.1.0-windows-x64-setup.exe
 ```powershell
 .\scripts\build-installer.ps1 -NoInstallMissingTools
 ```
+
+## Установка и запуск
+
+Запустите installer из `dist\`:
+
+```text
+dist\ScreenBridge-0.1.0-windows-x64-setup.exe
+```
+
+Установленная версия создает конфиги в `%APPDATA%\ScreenBridge`:
+
+- `host.toml` - настройки компьютера, чей экран нужно показать.
+- `viewer.toml` - настройки компьютера, который смотрит экран.
+
+Перед первым запуском откройте Start Menu shortcut `ScreenBridge Config` и
+измените token, LAN subnet и адрес host в конфигах.
+
+Основные Start Menu shortcuts:
+
+- `ScreenBridge Host` - запускает host с `%APPDATA%\ScreenBridge\host.toml`.
+- `ScreenBridge Viewer` - запускает viewer с `%APPDATA%\ScreenBridge\viewer.toml`.
+- `ScreenBridge Allow Host Firewall` - создает или обновляет inbound firewall
+  rule для host TCP port после UAC/Admin подтверждения.
 
 ## Host RTSP server
 

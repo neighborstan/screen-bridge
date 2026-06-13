@@ -56,6 +56,7 @@ Source: "{#ProjectRoot}\installer\allow-host-firewall.cmd"; DestDir: "{app}\bin"
 Source: "{#ProjectRoot}\scripts\add-firewall-rule.ps1"; DestDir: "{app}\scripts"; Flags: ignoreversion
 Source: "{#ProjectRoot}\installer\assets\screenbridge.ico"; DestDir: "{app}\assets"; Flags: ignoreversion
 Source: "{#ProjectRoot}\README.md"; DestDir: "{app}"; Flags: ignoreversion
+Source: "{#ProjectRoot}\CHANGELOG.md"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#ProjectRoot}\LICENSE"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#ProjectRoot}\config\host.example.toml"; DestDir: "{app}\config"; Flags: ignoreversion
 Source: "{#ProjectRoot}\config\viewer.example.toml"; DestDir: "{app}\config"; Flags: ignoreversion
