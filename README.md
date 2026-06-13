@@ -111,6 +111,36 @@ cargo run -p screen-bridge-viewer -- --config config\viewer.local.toml
 Viewer подключается по RTSP/TCP с Basic auth и открывает окно с видео host
 screen.
 
+## Если viewer получает timeout
+
+С viewer-компьютера проверьте TCP port host:
+
+```powershell
+Test-NetConnection -ComputerName <host-ip> -Port 8554
+```
+
+Если `TcpTestSucceeded` равен `False`, viewer не дошел до RTSP authentication
+или GStreamer playback. Чаще всего входящий TCP port блокирует Windows Firewall
+на host-компьютере.
+
+В установленной версии используйте Start Menu shortcut:
+
+```text
+ScreenBridge Allow Host Firewall
+```
+
+Windows покажет UAC/Admin prompt. После подтверждения shortcut создаст или
+обновит inbound rule для ScreenBridge Host.
+
+То же действие из elevated PowerShell:
+
+```powershell
+.\scripts\add-firewall-rule.ps1 -Port 8554 -Profile Any
+```
+
+Если host привязан к LAN IP, проверка `127.0.0.1:8554` на host может быть
+`False`. Это нормально. Проверяйте именно IP из строки `Bind: <host-ip>:8554`.
+
 ## GStreamer smoke
 
 Локальная проверка захвата экрана:

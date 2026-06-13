@@ -51,7 +51,7 @@ pub fn run(config: HostConfig) -> Result<()> {
         config.security.auth_user, config.security.access_token
     );
     println!(
-        "Firewall: allow inbound TCP port {} for remote LAN clients if VLC cannot connect.",
+        "Firewall: if remote viewers cannot connect, use Start Menu shortcut \"ScreenBridge Allow Host Firewall\" or allow inbound TCP port {}.",
         server.port()
     );
     println!("Press Ctrl+C to stop.");
